@@ -1,0 +1,1355 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet-search.css">
+        <link rel="stylesheet" href="css/filter.css">
+<link rel="stylesheet" href="css/nouislider.min.css">
+        <link rel="stylesheet" href="css/leaflet-measure.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title>Bản đồ phân bố điểm du lịch tại thành phố Thủ Dầu Một</title>
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet-measure.js"></script>
+        <script src="js/leaflet-search.js"></script>
+        <script src="js/tailDT.js"></script>
+<script src="js/nouislider.min.js"></script>
+<script src="js/wNumb.js"></script>
+        <script src="data/CcPhngThDuMt_1.js"></script>
+        <script src="data/LpSng_2.js"></script>
+        <script src="data/imdulch_3.js"></script>
+        <script src="data/imdulch_4.js"></script>
+        <script src="data/imdulch_5.js"></script>
+        <script src="data/imdulch_6.js"></script>
+        <script>
+        var highlightLayer;
+        function highlightFeature(e) {
+            highlightLayer = e.target;
+
+            if (e.target.feature.geometry.type === 'LineString' || e.target.feature.geometry.type === 'MultiLineString') {
+              highlightLayer.setStyle({
+                color: '#ffff00',
+              });
+            } else {
+              highlightLayer.setStyle({
+                fillColor: '#ffff00',
+                fillOpacity: 1
+              });
+            }
+            highlightLayer.openPopup();
+        }
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        })
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // add class to format popup if it contains media
+		function addClassToPopupIfMedia(content, popup) {
+			var tempDiv = document.createElement('div');
+			tempDiv.innerHTML = content;
+			if (tempDiv.querySelector('td img')) {
+				popup._contentNode.classList.add('media');
+					// Delay to force the redraw
+					setTimeout(function() {
+						popup.update();
+					}, 10);
+			} else {
+				popup._contentNode.classList.remove('media');
+			}
+		}
+        var title = new L.Control({'position':'topright'});
+        title.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info');
+            this.update();
+            return this._div;
+        };
+        title.update = function () {
+            this._div.innerHTML = '<h2>Bản đồ phân bố điểm du lịch tại thành phố Thủ Dầu Một</h2>';
+        };
+        title.addTo(map);
+        var abstract = new L.Control({'position':'bottomright'});
+        abstract.onAdd = function (map) {
+            this._div = L.DomUtil.create('div',
+            'leaflet-control abstract');
+            this._div.id = 'abstract'
+
+                abstract.show();
+                return this._div;
+            };
+            abstract.show = function () {
+                this._div.classList.remove("abstract");
+                this._div.classList.add("abstractUncollapsed");
+                this._div.innerHTML = 'Bản đồ điện tử được biên tập bởi Nguyễn Xuân Trung';
+        };
+        abstract.addTo(map);
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        var measureControl = new L.Control.Measure({
+            position: 'topleft',
+            primaryLengthUnit: 'meters',
+            secondaryLengthUnit: 'kilometers',
+            primaryAreaUnit: 'sqmeters',
+            secondaryAreaUnit: 'hectares'
+        });
+        measureControl.addTo(map);
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].innerHTML = '';
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].className += ' fas fa-ruler';
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+            if (bounds_group.getLayers().length) {
+                map.fitBounds(bounds_group.getBounds());
+            }
+        }
+        map.createPane('pane_2gisMap_0');
+        map.getPane('pane_2gisMap_0').style.zIndex = 400;
+        var layer_2gisMap_0 = L.tileLayer('https://tile2.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1.1', {
+            pane: 'pane_2gisMap_0',
+            opacity: 1.0,
+            attribution: '',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 18
+        });
+        layer_2gisMap_0;
+        map.addLayer(layer_2gisMap_0);
+        function pop_CcPhngThDuMt_1(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['FID'] !== null ? autolinker.link(String(feature.properties['FID']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Phường'] !== null ? autolinker.link(String(feature.properties['Phường']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Diện tí'] !== null ? autolinker.link(String(feature.properties['Diện tí']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_CcPhngThDuMt_1_0(feature) {
+            switch(String(feature.properties['Phường'])) {
+                case 'Chánh Mỹ':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(187,33,211,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Chánh Nghĩa':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(107,222,115,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Định Hòa':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(22,85,211,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Hiệp An':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(157,85,240,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Hiệp Thành':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(218,161,111,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Hòa Phú':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(183,210,109,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Phú Cường':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(97,209,149,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Phú Hòa':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(237,122,206,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Phú Lợi':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(204,78,120,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Phú Mỹ':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(212,82,73,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Phú Tân':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(132,201,97,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Phú Thọ':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(234,206,26,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Tân An':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(24,200,180,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Tương Bình Hiệp':
+                    return {
+                pane: 'pane_CcPhngThDuMt_1',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(147,141,232,1.0)',
+                interactive: true,
+            }
+                    break;
+            }
+        }
+        map.createPane('pane_CcPhngThDuMt_1');
+        map.getPane('pane_CcPhngThDuMt_1').style.zIndex = 401;
+        map.getPane('pane_CcPhngThDuMt_1').style['mix-blend-mode'] = 'multiply';
+        var layer_CcPhngThDuMt_1 = new L.geoJson(json_CcPhngThDuMt_1, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_CcPhngThDuMt_1',
+            layerName: 'layer_CcPhngThDuMt_1',
+            pane: 'pane_CcPhngThDuMt_1',
+            onEachFeature: pop_CcPhngThDuMt_1,
+            style: style_CcPhngThDuMt_1_0,
+        });
+        bounds_group.addLayer(layer_CcPhngThDuMt_1);
+        map.addLayer(layer_CcPhngThDuMt_1);
+        function pop_LpSng_2(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Name'] !== null ? autolinker.link(String(feature.properties['Name']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Lenght'] !== null ? autolinker.link(String(feature.properties['Lenght']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_LpSng_2_0() {
+            return {
+                pane: 'pane_LpSng_2',
+                opacity: 1,
+                color: 'rgba(112,255,255,1.0)',
+                dashArray: '',
+                lineCap: 'round',
+                lineJoin: 'round',
+                weight: 3.0,
+                fillOpacity: 0,
+                interactive: true,
+            }
+        }
+        map.createPane('pane_LpSng_2');
+        map.getPane('pane_LpSng_2').style.zIndex = 402;
+        map.getPane('pane_LpSng_2').style['mix-blend-mode'] = 'normal';
+        var layer_LpSng_2 = new L.geoJson(json_LpSng_2, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_LpSng_2',
+            layerName: 'layer_LpSng_2',
+            pane: 'pane_LpSng_2',
+            onEachFeature: pop_LpSng_2,
+            style: style_LpSng_2_0,
+        });
+        bounds_group.addLayer(layer_LpSng_2);
+        map.addLayer(layer_LpSng_2);
+        function pop_imdulch_3(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Tên</th>\
+                        <td class="visible-with-data" id="Name">' + (feature.properties['Name'] !== null ? autolinker.link(String(feature.properties['Name']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Loại du lịch</th>\
+                        <td class="visible-with-data" id="Type">' + (feature.properties['Type'] !== null ? autolinker.link(String(feature.properties['Type']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phân theo cấp</th>\
+                        <td class="visible-with-data" id="Rank level">' + (feature.properties['Rank level'] !== null ? autolinker.link(String(feature.properties['Rank level']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Diện tích</th>\
+                        <td class="visible-with-data" id="Area (m2)">' + (feature.properties['Area (m2)'] !== null ? autolinker.link(String(feature.properties['Area (m2)']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Giá vé</th>\
+                        <td class="visible-with-data" id="Average Pr">' + (feature.properties['Average Pr'] !== null ? autolinker.link(String(feature.properties['Average Pr']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phường</th>\
+                        <td class="visible-with-data" id="Ward">' + (feature.properties['Ward'] !== null ? autolinker.link(String(feature.properties['Ward']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Đánh giá sao theo Google</th>\
+                        <td class="visible-with-data" id="Google rat">' + (feature.properties['Google rat'] !== null ? autolinker.link(String(feature.properties['Google rat']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phân theo tuổi</th>\
+                        <td class="visible-with-data" id="Age range">' + (feature.properties['Age range'] !== null ? autolinker.link(String(feature.properties['Age range']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_imdulch_3_0() {
+            return {
+                pane: 'pane_imdulch_3',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(177,33,37,1.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_imdulch_3');
+        map.getPane('pane_imdulch_3').style.zIndex = 403;
+        map.getPane('pane_imdulch_3').style['mix-blend-mode'] = 'normal';
+        var layer_imdulch_3 = new L.geoJson(json_imdulch_3, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_imdulch_3',
+            layerName: 'layer_imdulch_3',
+            pane: 'pane_imdulch_3',
+            onEachFeature: pop_imdulch_3,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.circleMarker(latlng, style_imdulch_3_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_imdulch_3);
+        map.addLayer(layer_imdulch_3);
+        function pop_imdulch_4(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Tên</th>\
+                        <td class="visible-with-data" id="Name">' + (feature.properties['Name'] !== null ? autolinker.link(String(feature.properties['Name']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Loại du lịch</th>\
+                        <td class="visible-with-data" id="Type">' + (feature.properties['Type'] !== null ? autolinker.link(String(feature.properties['Type']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phân theo cấp</th>\
+                        <td class="visible-with-data" id="Rank level">' + (feature.properties['Rank level'] !== null ? autolinker.link(String(feature.properties['Rank level']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Diện tích</th>\
+                        <td class="visible-with-data" id="Area (m2)">' + (feature.properties['Area (m2)'] !== null ? autolinker.link(String(feature.properties['Area (m2)']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Giá vé</th>\
+                        <td class="visible-with-data" id="Average Pr">' + (feature.properties['Average Pr'] !== null ? autolinker.link(String(feature.properties['Average Pr']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phường</th>\
+                        <td class="visible-with-data" id="Ward">' + (feature.properties['Ward'] !== null ? autolinker.link(String(feature.properties['Ward']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Đánh giá sao theo Google</th>\
+                        <td class="visible-with-data" id="Google rat">' + (feature.properties['Google rat'] !== null ? autolinker.link(String(feature.properties['Google rat']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phân theo tuổi</th>\
+                        <td class="visible-with-data" id="Age range">' + (feature.properties['Age range'] !== null ? autolinker.link(String(feature.properties['Age range']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_imdulch_4_0() {
+            return {
+                pane: 'pane_imdulch_4',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(177,33,37,1.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_imdulch_4');
+        map.getPane('pane_imdulch_4').style.zIndex = 404;
+        map.getPane('pane_imdulch_4').style['mix-blend-mode'] = 'normal';
+        var layer_imdulch_4 = new L.geoJson(json_imdulch_4, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_imdulch_4',
+            layerName: 'layer_imdulch_4',
+            pane: 'pane_imdulch_4',
+            onEachFeature: pop_imdulch_4,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.circleMarker(latlng, style_imdulch_4_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_imdulch_4);
+        map.addLayer(layer_imdulch_4);
+        function pop_imdulch_5(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Tên</th>\
+                        <td class="visible-with-data" id="Name">' + (feature.properties['Name'] !== null ? autolinker.link(String(feature.properties['Name']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Loại du lịch</th>\
+                        <td class="visible-with-data" id="Type">' + (feature.properties['Type'] !== null ? autolinker.link(String(feature.properties['Type']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phân theo cấp</th>\
+                        <td class="visible-with-data" id="Rank level">' + (feature.properties['Rank level'] !== null ? autolinker.link(String(feature.properties['Rank level']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Diện tích</th>\
+                        <td class="visible-with-data" id="Area (m2)">' + (feature.properties['Area (m2)'] !== null ? autolinker.link(String(feature.properties['Area (m2)']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Giá vé</th>\
+                        <td class="visible-with-data" id="Average Pr">' + (feature.properties['Average Pr'] !== null ? autolinker.link(String(feature.properties['Average Pr']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phường</th>\
+                        <td class="visible-with-data" id="Ward">' + (feature.properties['Ward'] !== null ? autolinker.link(String(feature.properties['Ward']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Đánh giá sao theo Google</th>\
+                        <td class="visible-with-data" id="Google rat">' + (feature.properties['Google rat'] !== null ? autolinker.link(String(feature.properties['Google rat']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phân theo tuổi</th>\
+                        <td class="visible-with-data" id="Age range">' + (feature.properties['Age range'] !== null ? autolinker.link(String(feature.properties['Age range']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_imdulch_5_0() {
+            return {
+                pane: 'pane_imdulch_5',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(177,33,37,1.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_imdulch_5');
+        map.getPane('pane_imdulch_5').style.zIndex = 405;
+        map.getPane('pane_imdulch_5').style['mix-blend-mode'] = 'normal';
+        var layer_imdulch_5 = new L.geoJson(json_imdulch_5, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_imdulch_5',
+            layerName: 'layer_imdulch_5',
+            pane: 'pane_imdulch_5',
+            onEachFeature: pop_imdulch_5,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.circleMarker(latlng, style_imdulch_5_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_imdulch_5);
+        map.addLayer(layer_imdulch_5);
+        function pop_imdulch_6(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    for (var i in e.target._eventParents) {
+                        if (typeof e.target._eventParents[i].resetStyle === 'function') {
+                            e.target._eventParents[i].resetStyle(e.target);
+                        }
+                    }
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <th scope="row">Tên</th>\
+                        <td class="visible-with-data" id="Name">' + (feature.properties['Name'] !== null ? autolinker.link(String(feature.properties['Name']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Loại du lịch</th>\
+                        <td class="visible-with-data" id="Type">' + (feature.properties['Type'] !== null ? autolinker.link(String(feature.properties['Type']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phân theo cấp</th>\
+                        <td class="visible-with-data" id="Rank level">' + (feature.properties['Rank level'] !== null ? autolinker.link(String(feature.properties['Rank level']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Diện tích</th>\
+                        <td class="visible-with-data" id="Area (m2)">' + (feature.properties['Area (m2)'] !== null ? autolinker.link(String(feature.properties['Area (m2)']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Giá vé</th>\
+                        <td class="visible-with-data" id="Average Pr">' + (feature.properties['Average Pr'] !== null ? autolinker.link(String(feature.properties['Average Pr']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phường</th>\
+                        <td class="visible-with-data" id="Ward">' + (feature.properties['Ward'] !== null ? autolinker.link(String(feature.properties['Ward']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Đánh giá sao theo Google</th>\
+                        <td class="visible-with-data" id="Google rat">' + (feature.properties['Google rat'] !== null ? autolinker.link(String(feature.properties['Google rat']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <th scope="row">Phân theo tuổi</th>\
+                        <td class="visible-with-data" id="Age range">' + (feature.properties['Age range'] !== null ? autolinker.link(String(feature.properties['Age range']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_imdulch_6_0() {
+            return {
+                pane: 'pane_imdulch_6',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(177,33,37,1.0)',
+                interactive: true,
+            }
+        }
+        map.createPane('pane_imdulch_6');
+        map.getPane('pane_imdulch_6').style.zIndex = 406;
+        map.getPane('pane_imdulch_6').style['mix-blend-mode'] = 'normal';
+        var layer_imdulch_6 = new L.geoJson(json_imdulch_6, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_imdulch_6',
+            layerName: 'layer_imdulch_6',
+            pane: 'pane_imdulch_6',
+            onEachFeature: pop_imdulch_6,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.circleMarker(latlng, style_imdulch_6_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_imdulch_6);
+        map.addLayer(layer_imdulch_6);
+        var overlaysTree = [
+            {label: '<img src="legend/imdulch_6.png" /> Điểm du lịch', layer: layer_imdulch_6},
+            {label: '<img src="legend/imdulch_5.png" /> Điểm du lịch', layer: layer_imdulch_5},
+            {label: '<img src="legend/imdulch_4.png" /> Điểm du lịch', layer: layer_imdulch_4},
+            {label: '<img src="legend/imdulch_3.png" /> Điểm du lịch', layer: layer_imdulch_3},
+            {label: '<img src="legend/LpSng_2.png" /> Lớp Sông', layer: layer_LpSng_2},
+            {label: 'Các Phường Thủ Dầu Một<br /><table><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_ChánhMỹ0.png" /></td><td>Chánh Mỹ</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_ChánhNghĩa1.png" /></td><td>Chánh Nghĩa</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_ĐịnhHòa2.png" /></td><td>Định Hòa</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_HiệpAn3.png" /></td><td>Hiệp An</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_HiệpThành4.png" /></td><td>Hiệp Thành</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_HòaPhú5.png" /></td><td>Hòa Phú</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_PhúCường6.png" /></td><td>Phú Cường</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_PhúHòa7.png" /></td><td>Phú Hòa</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_PhúLợi8.png" /></td><td>Phú Lợi</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_PhúMỹ9.png" /></td><td>Phú Mỹ</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_PhúTân10.png" /></td><td>Phú Tân</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_PhúThọ11.png" /></td><td>Phú Thọ</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_TânAn12.png" /></td><td>Tân An</td></tr><tr><td style="text-align: center;"><img src="legend/CcPhngThDuMt_1_TươngBìnhHiệp13.png" /></td><td>Tương Bình Hiệp</td></tr></table>', layer: layer_CcPhngThDuMt_1},
+            {label: "2gis Map", layer: layer_2gisMap_0},]
+        var lay = L.control.layers.tree(null, overlaysTree,{
+            //namedToggle: true,
+            //selectorBack: false,
+            //closedSymbol: '&#8862; &#x1f5c0;',
+            //openedSymbol: '&#8863; &#x1f5c1;',
+            //collapseAll: 'Collapse all',
+            //expandAll: 'Expand all',
+            collapsed: false, 
+        });
+        lay.addTo(map);
+		document.addEventListener("DOMContentLoaded", function() {
+            // set new Layers List height which considers toggle icon
+            function newLayersListHeight() {
+                var layerScrollbarElement = document.querySelector('.leaflet-control-layers-scrollbar');
+                if (layerScrollbarElement) {
+                    var layersListElement = document.querySelector('.leaflet-control-layers-list');
+                    var originalHeight = layersListElement.style.height 
+                        || window.getComputedStyle(layersListElement).height;
+                    var newHeight = parseFloat(originalHeight) - 50;
+                    layersListElement.style.height = newHeight + 'px';
+                }
+            }
+            var isLayersListExpanded = true;
+            var controlLayersElement = document.querySelector('.leaflet-control-layers');
+            var toggleLayerControl = document.querySelector('.leaflet-control-layers-toggle');
+            // toggle Collapsed/Expanded and apply new Layers List height
+            toggleLayerControl.addEventListener('click', function() {
+                if (isLayersListExpanded) {
+                    controlLayersElement.classList.remove('leaflet-control-layers-expanded');
+                } else {
+                    controlLayersElement.classList.add('leaflet-control-layers-expanded');
+                }
+                isLayersListExpanded = !isLayersListExpanded;
+                newLayersListHeight()
+            });	
+			// apply new Layers List height if toggle layerstree
+			if (controlLayersElement) {
+				controlLayersElement.addEventListener('click', function(event) {
+					var toggleLayerHeaderPointer = event.target.closest('.leaflet-layerstree-header-pointer span');
+					if (toggleLayerHeaderPointer) {
+						newLayersListHeight();
+					}
+				});
+			}
+            // Collapsed/Expanded at Start to apply new height
+            setTimeout(function() {
+                toggleLayerControl.click();
+            }, 10);
+            setTimeout(function() {
+                toggleLayerControl.click();
+            }, 10);
+            // Collapsed touch/small screen
+            var isSmallScreen = window.innerWidth < 650;
+            if (isSmallScreen) {
+                setTimeout(function() {
+                    controlLayersElement.classList.remove('leaflet-control-layers-expanded');
+                    isLayersListExpanded = !isLayersListExpanded;
+                }, 500);
+            }  
+        });       
+        setBounds();
+        var i = 0;
+        layer_CcPhngThDuMt_1.eachLayer(function(layer) {
+            var context = {
+                feature: layer.feature,
+                variables: {}
+            };
+            layer.bindTooltip((layer.feature.properties['Phường'] !== null?String('<div style="color: #323232; font-size: 10pt; font-weight: bold; font-family: \'Times New Roman\', sans-serif;">' + layer.feature.properties['Phường']) + '</div>':''), {permanent: true, offset: [-0, -16], className: 'css_CcPhngThDuMt_1'});
+            labels.push(layer);
+            totalMarkers += 1;
+              layer.added = true;
+              addLabel(layer, i);
+              i++;
+        });
+        var i = 0;
+        layer_LpSng_2.eachLayer(function(layer) {
+            var context = {
+                feature: layer.feature,
+                variables: {}
+            };
+            layer.bindTooltip((layer.feature.properties['Name'] !== null?String('<div style="color: #323232; font-size: 10pt; font-weight: bold; font-family: \'Times New Roman\', sans-serif;">' + layer.feature.properties['Name']) + '</div>':''), {permanent: true, offset: [-0, -16], className: 'css_LpSng_2'});
+            labels.push(layer);
+            totalMarkers += 1;
+              layer.added = true;
+              addLabel(layer, i);
+              i++;
+        });
+        map.addControl(new L.Control.Search({
+            layer: layer_imdulch_4,
+            initial: false,
+            hideMarkerOnCollapse: true,
+            propertyName: 'Name'}));
+        document.getElementsByClassName('search-button')[0].className +=
+         ' fa fa-binoculars';
+        var mapDiv = document.getElementById('map');
+        var row = document.createElement('div');
+        row.className="row";
+        row.id="all";
+        row.style.height = "100%";
+        var col1 = document.createElement('div');
+        col1.className="col9";
+        col1.id = "mapWindow";
+        col1.style.height = "99%";
+        col1.style.width = "80%";
+        col1.style.display = "inline-block";
+        var col2 = document.createElement('div');
+        col2.className="col3";
+        col2.id = "menu";
+        col2.style.display = "inline-block";
+        mapDiv.parentNode.insertBefore(row, mapDiv);
+        document.getElementById("all").appendChild(col1);
+        document.getElementById("all").appendChild(col2);
+        col1.appendChild(mapDiv)
+        var Filters = {"Rank level": "str","Age range": "str","Google rat": "str","Type": "str","Ward": "str","Phường": "str"};
+        function filterFunc() {
+          map.eachLayer(function(lyr){
+          if ("options" in lyr && "dataVar" in lyr["options"]){
+            features = this[lyr["options"]["dataVar"]].features.slice(0);
+            try{
+              for (key in Filters){
+                keyS = key.replace(/[^a-zA-Z0-9_]/g, "")
+                if (Filters[key] == "str" || Filters[key] == "bool"){
+                  var selection = [];
+                  var options = document.getElementById("sel_" + keyS).options
+                  for (var i=0; i < options.length; i++) {
+                    if (options[i].selected) selection.push(options[i].value);
+                  }
+                    try{
+                      if (key in features[0].properties){
+                        for (i = features.length - 1;
+                          i >= 0; --i){
+                          if (selection.indexOf(
+                          features[i].properties[key])<0
+                          && selection.length>0) {
+                          features.splice(i,1);
+                          }
+                        }
+                      }
+                    } catch(err){
+                  }
+                }
+                if (Filters[key] == "int"){
+                  sliderVals =  document.getElementById(
+                    "div_" + keyS).noUiSlider.get();
+                  try{
+                    if (key in features[0].properties){
+                    for (i = features.length - 1; i >= 0; --i){
+                      if (parseInt(features[i].properties[key])
+                          < sliderVals[0]
+                          || parseInt(features[i].properties[key])
+                          > sliderVals[1]){
+                            features.splice(i,1);
+                          }
+                        }
+                      }
+                    } catch(err){
+                    }
+                  }
+                if (Filters[key] == "real"){
+                  sliderVals =  document.getElementById(
+                    "div_" + keyS).noUiSlider.get();
+                  try{
+                    if (key in features[0].properties){
+                    for (i = features.length - 1; i >= 0; --i){
+                      if (features[i].properties[key]
+                          < sliderVals[0]
+                          || features[i].properties[key]
+                          > sliderVals[1]){
+                            features.splice(i,1);
+                          }
+                        }
+                      }
+                    } catch(err){
+                    }
+                  }
+                if (Filters[key] == "date"
+                  || Filters[key] == "datetime"
+                  || Filters[key] == "time"){
+                  try{
+                    if (key in features[0].properties){
+                      HTMLkey = key.replace(/[&\/\\#,+()$~%.'":*?<>{} ]/g, '');
+                      startdate = document.getElementById("dat_" +
+                        HTMLkey + "_date1").value.replace(" ", "T");
+                      enddate = document.getElementById("dat_" +
+                        HTMLkey + "_date2").value.replace(" ", "T");
+                      for (i = features.length - 1; i >= 0; --i){
+                        if (features[i].properties[key] < startdate
+                          || features[i].properties[key] > enddate){
+                          features.splice(i,1);
+                        }
+                      }
+                    }
+                  } catch(err){
+                  }
+                }
+              }
+            } catch(err){
+            }
+          this[lyr["options"]["layerName"]].clearLayers();
+          this[lyr["options"]["layerName"]].addData(features);
+        var i = 0;
+        layer_CcPhngThDuMt_1.eachLayer(function(layer) {
+            var context = {
+                feature: layer.feature,
+                variables: {}
+            };
+            layer.bindTooltip((layer.feature.properties['Phường'] !== null?String('<div style="color: #323232; font-size: 10pt; font-weight: bold; font-family: \'Times New Roman\', sans-serif;">' + layer.feature.properties['Phường']) + '</div>':''), {permanent: true, offset: [-0, -16], className: 'css_CcPhngThDuMt_1'});
+            labels.push(layer);
+            totalMarkers += 1;
+              layer.added = true;
+              addLabel(layer, i);
+              i++;
+        });
+        var i = 0;
+        layer_LpSng_2.eachLayer(function(layer) {
+            var context = {
+                feature: layer.feature,
+                variables: {}
+            };
+            layer.bindTooltip((layer.feature.properties['Name'] !== null?String('<div style="color: #323232; font-size: 10pt; font-weight: bold; font-family: \'Times New Roman\', sans-serif;">' + layer.feature.properties['Name']) + '</div>':''), {permanent: true, offset: [-0, -16], className: 'css_LpSng_2'});
+            labels.push(layer);
+            totalMarkers += 1;
+              layer.added = true;
+              addLabel(layer, i);
+              i++;
+        });
+          }
+          })
+        }
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Ranklevel = document.createElement('div');
+            div_Ranklevel.id = "div_Ranklevel";
+            div_Ranklevel.className= "filterselect";
+            document.getElementById("menu").appendChild(div_Ranklevel);
+            sel_Ranklevel = document.createElement('select');
+            sel_Ranklevel.multiple = true;
+            sel_Ranklevel.size = 4;
+            sel_Ranklevel.id = "sel_Ranklevel";
+            var Ranklevel_options_str = "<option value='' unselected></option>";
+            sel_Ranklevel.onchange = function(){filterFunc()};
+            Ranklevel_options_str  += '<option value="Chưa phân cấp">Chưa phân cấp</option>';
+            Ranklevel_options_str  += '<option value="Di tích lịch sử cấp quốc gia">Di tích lịch sử cấp quốc gia</option>';
+            Ranklevel_options_str  += '<option value="Di tích lịch sử cấp tỉnh">Di tích lịch sử cấp tỉnh</option>';
+            Ranklevel_options_str  += '<option value="Không áp dụng">Không áp dụng</option>';
+            sel_Ranklevel.innerHTML = Ranklevel_options_str;
+            div_Ranklevel.appendChild(sel_Ranklevel);
+            var lab_Ranklevel = document.createElement('div');
+            lab_Ranklevel.innerHTML = 'Rank level';
+            lab_Ranklevel.className = 'filterlabel';
+            div_Ranklevel.appendChild(lab_Ranklevel);
+            var reset_Ranklevel = document.createElement('div');
+            reset_Ranklevel.innerHTML = 'clear filter';
+            reset_Ranklevel.className = 'filterlabel';
+            reset_Ranklevel.onclick = function() {
+                var options = document.getElementById("sel_Ranklevel").options;
+                for (var i=0; i < options.length; i++) {
+                    options[i].selected = false;
+                }
+                filterFunc();
+            };
+            div_Ranklevel.appendChild(reset_Ranklevel);
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Agerange = document.createElement('div');
+            div_Agerange.id = "div_Agerange";
+            div_Agerange.className= "filterselect";
+            document.getElementById("menu").appendChild(div_Agerange);
+            sel_Agerange = document.createElement('select');
+            sel_Agerange.multiple = true;
+            sel_Agerange.size = 5;
+            sel_Agerange.id = "sel_Agerange";
+            var Agerange_options_str = "<option value='' unselected></option>";
+            sel_Agerange.onchange = function(){filterFunc()};
+            Agerange_options_str  += '<option value="100-200">100-200</option>';
+            Agerange_options_str  += '<option value="200-300">200-300</option>';
+            Agerange_options_str  += '<option value="50-100">50-100</option>';
+            Agerange_options_str  += '<option value="<50"><50</option>';
+            Agerange_options_str  += '<option value=">300">>300</option>';
+            sel_Agerange.innerHTML = Agerange_options_str;
+            div_Agerange.appendChild(sel_Agerange);
+            var lab_Agerange = document.createElement('div');
+            lab_Agerange.innerHTML = 'Age range';
+            lab_Agerange.className = 'filterlabel';
+            div_Agerange.appendChild(lab_Agerange);
+            var reset_Agerange = document.createElement('div');
+            reset_Agerange.innerHTML = 'clear filter';
+            reset_Agerange.className = 'filterlabel';
+            reset_Agerange.onclick = function() {
+                var options = document.getElementById("sel_Agerange").options;
+                for (var i=0; i < options.length; i++) {
+                    options[i].selected = false;
+                }
+                filterFunc();
+            };
+            div_Agerange.appendChild(reset_Agerange);
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Googlerat = document.createElement('div');
+            div_Googlerat.id = "div_Googlerat";
+            div_Googlerat.className= "filterselect";
+            document.getElementById("menu").appendChild(div_Googlerat);
+            sel_Googlerat = document.createElement('select');
+            sel_Googlerat.multiple = true;
+            sel_Googlerat.size = 10;
+            sel_Googlerat.id = "sel_Googlerat";
+            var Googlerat_options_str = "<option value='' unselected></option>";
+            sel_Googlerat.onchange = function(){filterFunc()};
+            Googlerat_options_str  += '<option value="3.1">3.1</option>';
+            Googlerat_options_str  += '<option value="3.7">3.7</option>';
+            Googlerat_options_str  += '<option value="4">4</option>';
+            Googlerat_options_str  += '<option value="4.1">4.1</option>';
+            Googlerat_options_str  += '<option value="4.2">4.2</option>';
+            Googlerat_options_str  += '<option value="4.3">4.3</option>';
+            Googlerat_options_str  += '<option value="4.4">4.4</option>';
+            Googlerat_options_str  += '<option value="4.5">4.5</option>';
+            Googlerat_options_str  += '<option value="4.6">4.6</option>';
+            Googlerat_options_str  += '<option value="4.7">4.7</option>';
+            Googlerat_options_str  += '<option value="4.8">4.8</option>';
+            Googlerat_options_str  += '<option value="5">5</option>';
+            Googlerat_options_str  += '<option value="không có">không có</option>';
+            sel_Googlerat.innerHTML = Googlerat_options_str;
+            div_Googlerat.appendChild(sel_Googlerat);
+            var lab_Googlerat = document.createElement('div');
+            lab_Googlerat.innerHTML = 'Google rat';
+            lab_Googlerat.className = 'filterlabel';
+            div_Googlerat.appendChild(lab_Googlerat);
+            var reset_Googlerat = document.createElement('div');
+            reset_Googlerat.innerHTML = 'clear filter';
+            reset_Googlerat.className = 'filterlabel';
+            reset_Googlerat.onclick = function() {
+                var options = document.getElementById("sel_Googlerat").options;
+                for (var i=0; i < options.length; i++) {
+                    options[i].selected = false;
+                }
+                filterFunc();
+            };
+            div_Googlerat.appendChild(reset_Googlerat);
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Type = document.createElement('div');
+            div_Type.id = "div_Type";
+            div_Type.className= "filterselect";
+            document.getElementById("menu").appendChild(div_Type);
+            sel_Type = document.createElement('select');
+            sel_Type.multiple = true;
+            sel_Type.size = 10;
+            sel_Type.id = "sel_Type";
+            var Type_options_str = "<option value='' unselected></option>";
+            sel_Type.onchange = function(){filterFunc()};
+            Type_options_str  += '<option value="Di tích kiến trúc">Di tích kiến trúc</option>';
+            Type_options_str  += '<option value="Di tích lưu niệm danh nhân">Di tích lưu niệm danh nhân</option>';
+            Type_options_str  += '<option value="Di tích lịch sử">Di tích lịch sử</option>';
+            Type_options_str  += '<option value="Giải trí">Giải trí</option>';
+            Type_options_str  += '<option value="Giải trí, sinh thái">Giải trí, sinh thái</option>';
+            Type_options_str  += '<option value="Kiến trúc">Kiến trúc</option>';
+            Type_options_str  += '<option value="Làng nghề truyền thống">Làng nghề truyền thống</option>';
+            Type_options_str  += '<option value="Làng nghề truyền thống, trải nghiệm văn hóa và sản xuất sơn mài">Làng nghề truyền thống, trải nghiệm văn hóa và sản xuất sơn mài</option>';
+            Type_options_str  += '<option value="MICE">MICE</option>';
+            Type_options_str  += '<option value="Sinh thái">Sinh thái</option>';
+            Type_options_str  += '<option value="Thể thao">Thể thao</option>';
+            Type_options_str  += '<option value="Tâm linh">Tâm linh</option>';
+            Type_options_str  += '<option value="Tổng hợp (giải trí, tâm linh, sinh thái)">Tổng hợp (giải trí, tâm linh, sinh thái)</option>';
+            Type_options_str  += '<option value="Vui chơi, dã ngoại">Vui chơi, dã ngoại</option>';
+            Type_options_str  += '<option value="Văn hóa">Văn hóa</option>';
+            Type_options_str  += '<option value="Văn hóa, giáo dục">Văn hóa, giáo dục</option>';
+            sel_Type.innerHTML = Type_options_str;
+            div_Type.appendChild(sel_Type);
+            var lab_Type = document.createElement('div');
+            lab_Type.innerHTML = 'Type';
+            lab_Type.className = 'filterlabel';
+            div_Type.appendChild(lab_Type);
+            var reset_Type = document.createElement('div');
+            reset_Type.innerHTML = 'clear filter';
+            reset_Type.className = 'filterlabel';
+            reset_Type.onclick = function() {
+                var options = document.getElementById("sel_Type").options;
+                for (var i=0; i < options.length; i++) {
+                    options[i].selected = false;
+                }
+                filterFunc();
+            };
+            div_Type.appendChild(reset_Type);
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Ward = document.createElement('div');
+            div_Ward.id = "div_Ward";
+            div_Ward.className= "filterselect";
+            document.getElementById("menu").appendChild(div_Ward);
+            sel_Ward = document.createElement('select');
+            sel_Ward.multiple = true;
+            sel_Ward.size = 10;
+            sel_Ward.id = "sel_Ward";
+            var Ward_options_str = "<option value='' unselected></option>";
+            sel_Ward.onchange = function(){filterFunc()};
+            Ward_options_str  += '<option value="Chánh Mỹ">Chánh Mỹ</option>';
+            Ward_options_str  += '<option value="Chánh Nghĩa">Chánh Nghĩa</option>';
+            Ward_options_str  += '<option value="Hiệp An">Hiệp An</option>';
+            Ward_options_str  += '<option value="Hiệp Thành">Hiệp Thành</option>';
+            Ward_options_str  += '<option value="Hòa Phú">Hòa Phú</option>';
+            Ward_options_str  += '<option value="Hòa Phú	">Hòa Phú	</option>';
+            Ward_options_str  += '<option value="Phú Cường">Phú Cường</option>';
+            Ward_options_str  += '<option value="Phú Hoà">Phú Hoà</option>';
+            Ward_options_str  += '<option value="Phú Lợi">Phú Lợi</option>';
+            Ward_options_str  += '<option value="Phú Mỹ">Phú Mỹ</option>';
+            Ward_options_str  += '<option value="Phú Thọ">Phú Thọ</option>';
+            Ward_options_str  += '<option value="Tân An">Tân An</option>';
+            Ward_options_str  += '<option value="Tương Bình Hiệp">Tương Bình Hiệp</option>';
+            Ward_options_str  += '<option value="Định Hòa">Định Hòa</option>';
+            sel_Ward.innerHTML = Ward_options_str;
+            div_Ward.appendChild(sel_Ward);
+            var lab_Ward = document.createElement('div');
+            lab_Ward.innerHTML = 'Ward';
+            lab_Ward.className = 'filterlabel';
+            div_Ward.appendChild(lab_Ward);
+            var reset_Ward = document.createElement('div');
+            reset_Ward.innerHTML = 'clear filter';
+            reset_Ward.className = 'filterlabel';
+            reset_Ward.onclick = function() {
+                var options = document.getElementById("sel_Ward").options;
+                for (var i=0; i < options.length; i++) {
+                    options[i].selected = false;
+                }
+                filterFunc();
+            };
+            div_Ward.appendChild(reset_Ward);
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Phng = document.createElement('div');
+            div_Phng.id = "div_Phng";
+            div_Phng.className= "filterselect";
+            document.getElementById("menu").appendChild(div_Phng);
+            sel_Phng = document.createElement('select');
+            sel_Phng.multiple = true;
+            sel_Phng.size = 10;
+            sel_Phng.id = "sel_Phng";
+            var Phng_options_str = "<option value='' unselected></option>";
+            sel_Phng.onchange = function(){filterFunc()};
+            Phng_options_str  += '<option value="Chánh Mỹ">Chánh Mỹ</option>';
+            Phng_options_str  += '<option value="Chánh Nghĩa">Chánh Nghĩa</option>';
+            Phng_options_str  += '<option value="Hiệp An">Hiệp An</option>';
+            Phng_options_str  += '<option value="Hiệp Thành">Hiệp Thành</option>';
+            Phng_options_str  += '<option value="Hòa Phú">Hòa Phú</option>';
+            Phng_options_str  += '<option value="Phú Cường">Phú Cường</option>';
+            Phng_options_str  += '<option value="Phú Hòa">Phú Hòa</option>';
+            Phng_options_str  += '<option value="Phú Lợi">Phú Lợi</option>';
+            Phng_options_str  += '<option value="Phú Mỹ">Phú Mỹ</option>';
+            Phng_options_str  += '<option value="Phú Thọ">Phú Thọ</option>';
+            Phng_options_str  += '<option value="Phú Tân">Phú Tân</option>';
+            Phng_options_str  += '<option value="Tân An">Tân An</option>';
+            Phng_options_str  += '<option value="Tương Bình Hiệp">Tương Bình Hiệp</option>';
+            Phng_options_str  += '<option value="Định Hòa">Định Hòa</option>';
+            sel_Phng.innerHTML = Phng_options_str;
+            div_Phng.appendChild(sel_Phng);
+            var lab_Phng = document.createElement('div');
+            lab_Phng.innerHTML = 'Phường';
+            lab_Phng.className = 'filterlabel';
+            div_Phng.appendChild(lab_Phng);
+            var reset_Phng = document.createElement('div');
+            reset_Phng.innerHTML = 'clear filter';
+            reset_Phng.className = 'filterlabel';
+            reset_Phng.onclick = function() {
+                var options = document.getElementById("sel_Phng").options;
+                for (var i=0; i < options.length; i++) {
+                    options[i].selected = false;
+                }
+                filterFunc();
+            };
+            div_Phng.appendChild(reset_Phng);
+        resetLabels([layer_CcPhngThDuMt_1,layer_LpSng_2]);
+        map.on("zoomend", function(){
+            resetLabels([layer_CcPhngThDuMt_1,layer_LpSng_2]);
+        });
+        map.on("layeradd", function(){
+            resetLabels([layer_CcPhngThDuMt_1,layer_LpSng_2]);
+        });
+        map.on("layerremove", function(){
+            resetLabels([layer_CcPhngThDuMt_1,layer_LpSng_2]);
+        });
+        </script>
+    </body>
+</html>
